@@ -29,80 +29,85 @@ api.register {
     kind = "string"
 }
 
----
--- attach ourselfs to the running action.
----
-p.override(p.action, 'call', function (base, name)
-    if os.istarget("window") then
-        local a = p.action.get(name)
+api.register {
+    name = "mpimt",
+    scope = "config",
+    kind = "boolean"
+}
 
-        -- store the old callback.
-        local onBaseProject = a.onProject or a.onproject
+if os.istarget("windows") then
+    local function getMpiRoot(cfg)
+        local mpi = iif(cfg.mpi ~= nil, cfg.mpi, "Off")
+        local mpiRoot = nil
 
-        -- override it with our own.
-        a.onProject = function(prj)
-            -- go through each configuration, and call the setup configuration methods.
-            for cfg in p.project.eachconfig(prj) do
-                local mpi = iff(cfg.mpi ~= nil, cfg.mpi, "Off")
+        if mpi == "On" then
+            mpiRoot = os.getenv("I_MPI_ROOT")
 
-                if mpiRoot == "On" then
-                    local mpiRoot = os.getenv("I_MPI_ROOT")
+            if mpiRoot == nil then
+                mpiRoot = os.findlib("impi")
 
-                    if mpiRoot == nil then
-                        mpiRoot = os.findlib("impi")
+                if mpiRoot ~= nil then
+                    mpiRoot = mpiRoot .. "../.."
+                end
+            end
+        end
 
-                        if mpiRoot ~= nil then
-                            mpiRoot = mpiRoot .. "../.."
-                        end
+        return mpiRoot
+    end
+
+    premake.override(premake.action, 'call', function (base, name)
+        local a = premake.action.get(name)
+
+        premake.override(a, 'onProject', function(base, prj)
+            for cfg in premake.project.eachconfig(prj) do
+                local mpiRoot = getMpiRoot(cfg)
+                local libmtsuffix = iif(cfg.mpimt, "_mt", "")
+                local linksmtsuffix = iif(cfg.mpimt, "mt", "")
+    
+                if mpiRoot ~= nil then
+                    if premake.config.isDebugBuild(cfg) then
+                        table.insert(cfg.libdirs, mpiRoot .. "/intel64/lib/debug" .. libmtsuffix)
+                        table.insert(cfg.links, "impid" .. linksmtsuffix)
+                    else
+                        table.insert(cfg.libdirs, mpiRoot .. "/intel64/lib/release" .. libmtsuffix)
+                        table.insert(cfg.links, "impi" .. linksmtsuffix)
                     end
-
-                    if mpiRoot ~= nil then
-                        libdirs { mpiRoot .. "/intel64/lib/release" }
-                        links "impi"
-                        includedirs { mpiRoot .. "/intel64/include"}
-                    end
+                    table.insert(cfg.includedirs,  mpiRoot .. "/intel64/include")
                 end
             end
 
-            -- then call the old onProject.
-            if onBaseProject then
-                return onBaseProject(prj)
+            return base(prj)
+        end)
+
+        return base(name)
+    end)
+else
+    premake.override(gcc, "gettoolname", function(base, cfg, tool)
+        local toolname = base(cfg, tool)
+
+        if cfg.mpi == "On" then
+            local mpicompilerdir = ""
+            if cfg.mpicompilerdir ~= nil then
+                mpicompilerdir = cfg.mpicompilerdir
+
+                if not (mpicompilerdir:endwith("/") or mpicompilerdir:endwith("\\")) then
+                    mpicompilerdir = mpicompilerdir .. "/"
+                end
+            end
+
+            if tool == "cc" then
+                buildoptions {
+                    "-cc=" .. toolname
+                }
+                toolname = iif(cfg.mpicc ~= nil, cfg.mpicc, mpicompilerdir .. "mpicc")
+            elseif tool == "cxx" then
+                buildoptions {
+                    "-cxx=" .. toolname
+                }
+                toolname = iif(cfg.mpicxx ~= nil, cfg.mpicxx, mpicompilerdir .. "mpicxx")
             end
         end
-    end
 
-	-- now call the original action.call methods
-	return base(name)
-end)
-
-premake.override(gcc, "gettoolname", function(base, cfg, tool)
-    local wrapper = cfg.gccwrapper
-    if wrapper and gcc.wrappers[wrapper] and gcc.wrappers[wrapper][tool] then
-        return gcc.wrappers[wrapper][tool]
-    else
-        return base(cfg, tool)
-    end
-
-    local toolname = base(cfg, tool)
-
-    local mpi = iff(cfg.mpi ~= nil, cfg.mpi, "Off")
-
-    if mpi == "On" then
-        local mpicompilerdir = ""
-        if cfg.mpicompilerdir ~= nil then
-            mpicompilerdir = cfg.mpicompilerdir
-
-            if not (mpicompilerdir:endwith("/") or mpicompilerdir:endwith("\\")) then
-                mpicompilerdir = mpicompilerdir .. "/"
-            end
-        end
-
-        if tool == "cc" then
-            buildoptions "-cc=" .. toolname
-            toolname = iif(cfg.mpicc ~= nil, cfg.mpicc, mpicompilerdir .. "mpicc")
-        elseif tool == "cxx" then
-            buildoptions "-cxx=" .. toolname
-            toolname = iif(cfg.mpicxx ~= nil, cfg.mpicxx, mpicompilerdir .. "mpicxx")
-        end
-    end
-end)
+        return toolname
+    end)
+end
