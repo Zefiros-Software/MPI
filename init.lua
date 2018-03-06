@@ -66,13 +66,13 @@ p.override(p.action, 'call', function (base, name)
 
             -- then call the old onProject.
             if onBaseProject then
-                onBaseProject(prj)
+                return onBaseProject(prj)
             end
         end
     end
 
 	-- now call the original action.call methods
-	base(name)
+	return base(name)
 end)
 
 premake.override(gcc, "gettoolname", function(base, cfg, tool)
