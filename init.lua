@@ -58,7 +58,11 @@ if os.istarget("windows") then
     premake.override(premake.action, 'call', function (base, name)
         local a = premake.action.get(name)
 
-        premake.override(a, 'onProject', function(base, prj)
+        if a.onProject == nil then
+            return base(name)
+        end
+
+        premake.override(a, 'onProject', function(baseOnProject, prj)
             for cfg in premake.project.eachconfig(prj) do
                 local mpiRoot = getMpiRoot(cfg)
                 local libmtsuffix = iif(cfg.mpimt, "_mt", "")
@@ -76,7 +80,7 @@ if os.istarget("windows") then
                 end
             end
 
-            return base(prj)
+            return baseOnProject(prj)
         end)
 
         return base(name)
