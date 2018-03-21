@@ -100,14 +100,18 @@ else
             end
 
             if tool == "cc" then
-                buildoptions {
-                    "-cc=" .. toolname
-                }
+                if toolname ~= nil then
+                    buildoptions {
+                        "-cc=" .. toolname
+                    }
+                end
                 toolname = iif(cfg.mpicc ~= nil, cfg.mpicc, mpicompilerdir .. "mpicc")
             elseif tool == "cxx" then
-                buildoptions {
-                    "-cxx=" .. toolname
-                }
+                if toolname ~= nil then
+                    buildoptions {
+                        "-cxx=" .. toolname
+                    }
+                end
                 toolname = iif(cfg.mpicxx ~= nil, cfg.mpicxx, mpicompilerdir .. "mpicxx")
             end
         end
